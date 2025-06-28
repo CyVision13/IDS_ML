@@ -1,4 +1,7 @@
 from install_dependencies import install_dependencies
+from preprocessing import preprocess_data
 
-# Call the install_dependencies function
 install_dependencies()
+
+preprocess_data()
+

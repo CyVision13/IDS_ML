@@ -14,3 +14,7 @@ def load_data():
     df = pd.concat([train_df, test_df], ignore_index=True)
 
     return df
+
+
+def preprocess_data():
+    df = load_data()

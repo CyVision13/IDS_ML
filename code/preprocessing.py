@@ -16,5 +16,23 @@ def load_data():
     return df
 
 
+def clean_data(df):
+    print("Missing values before cleaning:")
+    print(df.isnull().sum())
+
+    df = df.dropna()
+
+    df = df.drop_duplicates()
+
+    print("Missing values after cleaning:")
+    print(df.isnull().sum())
+
+    print(f"Number of duplicates removed: {len(df) - len(df.drop_duplicates())}")
+
+    return df
+
+
 def preprocess_data():
     df = load_data()
+
+    df = clean_data(df)

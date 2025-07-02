@@ -5,6 +5,7 @@ from scipy.stats import chi2_contingency, pearsonr
 from sklearn.preprocessing import LabelEncoder
 from pathlib import Path
 import sys
+
 # Add project root to python path (more reliable method)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -51,15 +52,32 @@ def chi_square_ranking(X, y):
     return ranking
 
 
-def mad_ranking(X):
-    """Calculate Mean Absolute Deviation for feature ranking"""
-    mad_values = np.mean(np.abs(X - np.mean(X, axis=0)), axis=0)
+def mad_ranking(X, exclude_cols=None):
+    if exclude_cols is None:
+        exclude_cols = ['id', 'attack_cat']  # add any other columns to exclude
+
+    print("Input columns:", X.columns)
+    print("Excluding columns:", exclude_cols)
+
+    # Drop columns that should not be ranked
+    X_filtered = X.drop(columns=[col for col in exclude_cols if col in X.columns])
+
+    # Select numeric columns after exclusion
+    X_numeric = X_filtered.select_dtypes(include=np.number)
+    print("Numeric columns considered:", X_numeric.columns)
+
+    means = X_numeric.mean(axis=0)
+    print("Means per feature:\n", means)
+
+    abs_dev = X_numeric.sub(means, axis=1).abs()
+    mad_values = abs_dev.mean(axis=0)
 
     ranking = pd.DataFrame({
-        'Feature': X.columns,
-        'MAD': mad_values
-    }).sort_values('MAD', ascending=False)
+        'Feature': mad_values.index,
+        'MAD': mad_values.values
+    }).sort_values('MAD', ascending=False).reset_index(drop=True)
 
+    print("Ranking:\n", ranking)
     return ranking
 
 

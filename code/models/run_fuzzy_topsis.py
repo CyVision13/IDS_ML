@@ -42,4 +42,26 @@ def run_fuzzy_topsis_feature_selection():
     # Save output
     output_path = PROJECT_ROOT / "results" / "tables" / "fuzzy_topsis_top20.csv"
     top_features_df.to_csv(output_path, index=False)
+    # Filter train/test sets to top 20 features
+    train_path = PROJECT_ROOT / "data" / "processed" / "train_processed.csv"
+    test_path = PROJECT_ROOT / "data" / "processed" / "test_processed.csv"
 
+    train_df = pd.read_csv(train_path)
+    test_df = pd.read_csv(test_path)
+
+    top_features = top_features_df["Feature"].tolist()
+
+    # Keep target column if exists
+    if 'label' in train_df.columns:
+        top_features.append('label')
+    elif 'Label' in train_df.columns:
+        top_features.append('Label')
+
+    # Filter and save
+    train_df_filtered = train_df[[col for col in top_features if col in train_df.columns]]
+    test_df_filtered = test_df[[col for col in top_features if col in test_df.columns]]
+
+    train_df_filtered.to_csv(PROJECT_ROOT / "data" / "processed" / "train_top20.csv", index=False)
+    test_df_filtered.to_csv(PROJECT_ROOT / "data" / "processed" / "test_top20.csv", index=False)
+
+    print("\nFiltered train and test sets saved with top 20 features.")

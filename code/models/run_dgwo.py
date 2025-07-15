@@ -2,6 +2,8 @@ import sys
 from pathlib import Path
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+
 
 # Setup project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -48,6 +50,11 @@ def run_dgwa_feature_selection():
     print(list(selected_features))
     print(f"Best classification accuracy (DGWA): {best_score:.4f}")
 
+    # ✅ NEW: Evaluate using final selected features
+    clf.fit(X_train[:, best_features_mask == 1], y_train)
+    y_pred = clf.predict(X_test[:, best_features_mask == 1])
+    evaluate_model(y_test, y_pred)
+
     # Save selected features
     output_path = PROJECT_ROOT / "results" / "tables" / "dgwa_selected_features.csv"
     pd.DataFrame({
@@ -55,3 +62,22 @@ def run_dgwa_feature_selection():
     }).to_csv(output_path, index=False)
 
     print(f"\nSaved selected features to: {output_path}")
+
+
+def evaluate_model(y_true, y_pred):
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred, average='binary')
+    rec = recall_score(y_true, y_pred, average='binary')
+    f1 = f1_score(y_true, y_pred, average='binary')
+    cm = confusion_matrix(y_true, y_pred)
+
+    tn, fp, fn, tp = cm.ravel()
+    specificity = tn / (tn + fp)
+
+    print(f"Accuracy: {acc:.4f}")
+    print(f"Precision: {prec:.4f}")
+    print(f"Recall: {rec:.4f}")
+    print(f"F1-score: {f1:.4f}")
+    print(f"Specificity: {specificity:.4f}")
+    print("Confusion Matrix:")
+    print(cm)

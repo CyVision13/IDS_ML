@@ -3,6 +3,9 @@ from preprocessing import preprocess_data
 from models.feature_selection import feature_selection as feature_selection_main
 from models.run_fuzzy_topsis import run_fuzzy_topsis_feature_selection
 from models.run_dgwo import run_dgwa_feature_selection
+from models.run_hf import run_hf_feature_selection
+from models.run_mgwa import run_mgwa_feature_selection
+
 # install_dependencies()
 #
 # preprocess_data()
@@ -11,4 +14,8 @@ from models.run_dgwo import run_dgwa_feature_selection
 
 # run_fuzzy_topsis_feature_selection()
 
-run_dgwa_feature_selection()
+# run_dgwa_feature_selection()
+
+# run_hf_feature_selection(k=10)
+
+run_mgwa_feature_selection()

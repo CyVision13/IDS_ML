@@ -6,15 +6,8 @@ from sklearn.metrics import accuracy_score
 
 class DGWA:
     def __init__(self, classifier, X_train, y_train, X_val, y_val,
-                 population_size=20, max_iter=50, feature_count=None, verbose=False):
-        """
-        classifier: sklearn-like classifier with fit/predict
-        X_train, y_train: training data
-        X_val, y_val: validation data for fitness eval
-        population_size: number of wolves
-        max_iter: max iterations
-        feature_count: number of features (dimensionality)
-        """
+                 population_size=20, max_iter=50, feature_count=None,
+                 verbose=False, use_exploration_ops=True):  # ✅ New flag
         self.classifier = classifier
         self.X_train = X_train
         self.y_train = y_train
@@ -24,12 +17,13 @@ class DGWA:
         self.max_iter = max_iter
         self.feature_count = feature_count or X_train.shape[1]
         self.verbose = verbose
+        self.use_exploration_ops = use_exploration_ops  # ✅ Save flag
 
-        # Initialize population: binary vectors of length feature_count
+        # Initialize population: binary vectors
         self.population = np.random.randint(2, size=(self.pop_size, self.feature_count))
         self.fitness = np.zeros(self.pop_size)
 
-        # Leaders: alpha (best), beta (second), delta (third)
+        # Alpha, Beta, Delta
         self.alpha_pos = None
         self.beta_pos = None
         self.delta_pos = None
@@ -110,14 +104,14 @@ class DGWA:
             new_population = []
 
             for wolf in self.population:
-                # Exploration phase: generate candidate
-                candidate = self.exploration_operators(wolf)
-
-                # Exploitation phase: update based on leaders
-                exploitation_pos = self.exploitation_operator()
-
-                # Combine exploration and exploitation
-                updated_wolf = np.where(np.random.rand(self.feature_count) < 0.5, candidate, exploitation_pos)
+                if self.use_exploration_ops:
+                    # Full DGWA: combine exploration + exploitation
+                    candidate = self.exploration_operators(wolf)
+                    exploitation_pos = self.exploitation_operator()
+                    updated_wolf = np.where(np.random.rand(self.feature_count) < 0.5, candidate, exploitation_pos)
+                else:
+                    # MGWA: only use exploitation
+                    updated_wolf = self.exploitation_operator()
 
                 new_population.append(updated_wolf)
 

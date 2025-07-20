@@ -57,15 +57,22 @@ def preprocess_data():
 
     df = clean_data(df)
 
-    categorical_cols = ['proto', 'service', 'state', 'attack_cat']
-    numerical_cols = [col for col in df.columns if col not in categorical_cols + ['label', 'id']]
-
-    df = normalize_numerical_features(df, numerical_cols)
+    # Define nominal categorical columns to encode
+    categorical_cols = ['proto', 'state', 'service', 'attack_cat']
 
     df, encoders = encode_categorical_features(df, categorical_cols)
 
-    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42)
-    # Save processed data
+    # Binary columns (already numeric): keep as-is
+    binary_cols = ['is_sm_ips_ports', 'is_ftp_login', 'label']
+
+    # Numerical columns to normalize (all except categorical, binary, id)
+    exclude_cols = categorical_cols + binary_cols + ['id']
+    numerical_cols = [col for col in df.columns if col not in exclude_cols]
+
+    df = normalize_numerical_features(df, numerical_cols)
+
+    train_df, test_df = train_test_split(df, test_size=0.2, random_state=42, stratify=df['label'])
+
     processed_path = os.path.join('..', 'data', 'processed')
     os.makedirs(processed_path, exist_ok=True)
 

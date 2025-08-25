@@ -5,49 +5,6 @@ from sklearn.preprocessing import MinMaxScaler, LabelEncoder
 from sklearn.model_selection import train_test_split
 
 
-def load_data():
-    """Load NSL-KDD dataset from raw data files"""
-    # Get the absolute path to ensure correct file loading
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    raw_data_path = os.path.join(current_dir, '..', 'data', 'raw', 'NSL_KDD')
-    train_file = os.path.join(raw_data_path, 'KDDTrain+.TXT')
-    test_file = os.path.join(raw_data_path, 'KDDTest+.TXT')
-
-    # Check if files exist
-    if not os.path.exists(train_file):
-        raise FileNotFoundError(f"Training file not found: {train_file}")
-    if not os.path.exists(test_file):
-        raise FileNotFoundError(f"Test file not found: {test_file}")
-
-    column_names = [
-        'duration', 'protocol_type', 'service', 'flag', 'src_bytes', 'dst_bytes',
-        'land', 'wrong_fragment', 'urgent', 'hot', 'num_failed_logins', 'logged_in',
-        'num_compromised', 'root_shell', 'su_attempted', 'num_root', 'num_file_creations',
-        'num_shells', 'num_access_files', 'num_outbound_cmds', 'is_host_login', 'is_guest_login',
-        'count', 'srv_count', 'serror_rate', 'srv_serror_rate', 'rerror_rate', 'srv_rerror_rate',
-        'same_srv_rate', 'diff_srv_rate', 'srv_diff_host_rate', 'dst_host_count', 'dst_host_srv_count',
-        'dst_host_same_srv_rate', 'dst_host_diff_srv_rate', 'dst_host_same_src_port_rate',
-        'dst_host_srv_diff_host_rate', 'dst_host_serror_rate', 'dst_host_srv_serror_rate',
-        'dst_host_rerror_rate', 'dst_host_srv_rerror_rate', 'label', 'difficulty'
-    ]
-
-    try:
-        print("Loading training data...")
-        train_df = pd.read_csv(train_file, names=column_names)
-        print(f"Training data loaded: {len(train_df)} records")
-        
-        print("Loading test data...")
-        test_df = pd.read_csv(test_file, names=column_names)
-        print(f"Test data loaded: {len(test_df)} records")
-        
-        df = pd.concat([train_df, test_df], ignore_index=True)
-        print(f"Combined dataset: {len(df)} records")
-        
-        return df
-    except Exception as e:
-        raise Exception(f"Error loading data: {str(e)}")
-
-
 def load_data_separately():
     """Load NSL-KDD train and test datasets separately as per article methodology"""
     # Get the absolute path to ensure correct file loading
@@ -90,15 +47,7 @@ def load_data_separately():
 
 def clean_data(df):
     """Clean the dataset by removing missing values and duplicates"""
-    print("\n=== Data Cleaning ===")
     print(f"Initial dataset shape: {df.shape}")
-    
-    print("Missing values before cleaning:")
-    missing_counts = df.isnull().sum()
-    print(missing_counts[missing_counts > 0])
-    
-    if missing_counts.sum() == 0:
-        print("No missing values found.")
     
     # Remove missing values
     initial_len = len(df)
@@ -111,35 +60,6 @@ def clean_data(df):
     print(f"Duplicate records removed: {initial_len - len(df)}")
     
     print(f"Final dataset shape after cleaning: {df.shape}")
-    
-    return df
-
-
-def normalize_numerical_features(df, numerical_cols):
-    """Apply min-max normalization to numerical features"""
-    print(f"\nNormalizing {len(numerical_cols)} numerical features...")
-    scaler = MinMaxScaler()
-    df[numerical_cols] = scaler.fit_transform(df[numerical_cols])
-    print("Normalization completed.")
-    return df, scaler
-
-
-def preprocess_dataset(df, dataset_name, scaler=None, fit_scaler=True):
-    """Preprocess a single dataset (train or test)"""
-    print(f"\n=== Preprocessing {dataset_name} Dataset ===")
-    
-    # Clean data
-    df = clean_data(df)
-    
-    # Display label distribution before processing
-    print(f"\nLabel distribution in {dataset_name} before processing:")
-    print(df['label'].value_counts())
-    
-    # Drop 'difficulty' column (not used in modeling)
-    if 'difficulty' in df.columns:
-        df = df.drop(columns=['difficulty'])
-        print("Dropped 'difficulty' column")
-    
     return df
 
 
@@ -192,16 +112,41 @@ def apply_label_encoding(df, binary_label=False):
     return df
 
 
-def apply_feature_encoding(df, categorical_cols=None):
-    """Apply one-hot encoding to categorical features"""
+def apply_integer_encoding(df, categorical_cols=None, encoders=None, fit_encoders=True):
+    """Apply integer encoding to categorical features (for feature ranking)"""
     if categorical_cols is None:
         categorical_cols = ['protocol_type', 'service', 'flag']
     
     # Verify categorical columns exist
     existing_categorical_cols = [col for col in categorical_cols if col in df.columns]
-    if len(existing_categorical_cols) != len(categorical_cols):
-        missing_cols = set(categorical_cols) - set(existing_categorical_cols)
-        print(f"Warning: Missing categorical columns: {missing_cols}")
+    
+    print(f"Applying integer encoding to categorical features: {existing_categorical_cols}")
+    
+    if fit_encoders:
+        encoders = {}
+        for col in existing_categorical_cols:
+            le = LabelEncoder()
+            df[col] = le.fit_transform(df[col])
+            encoders[col] = le
+    else:
+        if encoders is None:
+            raise ValueError("Encoders must be provided when fit_encoders=False")
+        for col in existing_categorical_cols:
+            if col in encoders:
+                df[col] = encoders[col].transform(df[col])
+    
+    print(f"Integer encoding completed. Features: {len(df.columns)-1}")  # -1 for label
+    
+    return df, encoders
+
+
+def apply_onehot_encoding(df, categorical_cols=None):
+    """Apply one-hot encoding to categorical features (for ML algorithms)"""
+    if categorical_cols is None:
+        categorical_cols = ['protocol_type', 'service', 'flag']
+    
+    # Verify categorical columns exist
+    existing_categorical_cols = [col for col in categorical_cols if col in df.columns]
     
     print(f"Applying one-hot encoding to categorical features: {existing_categorical_cols}")
     
@@ -216,26 +161,28 @@ def apply_feature_encoding(df, categorical_cols=None):
     df_encoded = features_encoded.copy()
     df_encoded['label'] = labels
     
-    print(f"Features after one-hot encoding: {len(df_encoded.columns)-1}")  # -1 for label
+    print(f"One-hot encoding completed. Features: {len(df_encoded.columns)-1}")  # -1 for label
     
     return df_encoded
 
 
-def apply_normalization(df, scaler=None, fit_scaler=True):
+def apply_normalization(df, scaler=None, fit_scaler=True, encoding_type='integer'):
     """Apply min-max normalization to numerical features"""
-    # Identify numerical columns for normalization (exclude binary and label columns)
+    # Identify numerical columns for normalization
     binary_cols = ['land', 'logged_in', 'is_host_login', 'is_guest_login', 'label']
-    # Get one-hot encoded categorical columns
-    categorical_prefixes = ['protocol_type', 'service', 'flag']
-    encoded_categorical_cols = [col for col in df.columns if any(cat in col for cat in categorical_prefixes)]
     
-    exclude_cols = binary_cols + encoded_categorical_cols
+    if encoding_type == 'onehot':
+        # For one-hot encoded data, exclude one-hot encoded categorical columns
+        categorical_prefixes = ['protocol_type', 'service', 'flag']
+        encoded_categorical_cols = [col for col in df.columns if any(cat in col for cat in categorical_prefixes)]
+        exclude_cols = binary_cols + encoded_categorical_cols
+    else:
+        # For integer encoded data, include categorical columns in normalization
+        exclude_cols = binary_cols
+    
     numerical_cols = [col for col in df.columns if col not in exclude_cols]
     
-    print(f"\nFeature categorization:")
-    print(f"  One-hot encoded categorical features: {len(encoded_categorical_cols)}")
-    print(f"  Binary features: {len([col for col in binary_cols if col in df.columns])}")
-    print(f"  Numerical features for normalization: {len(numerical_cols)}")
+    print(f"Normalizing {len(numerical_cols)} numerical features...")
     
     # Apply min-max normalization to numerical features
     if fit_scaler:
@@ -252,252 +199,183 @@ def apply_normalization(df, scaler=None, fit_scaler=True):
     return df, scaler
 
 
-def preprocess_data(binary_label=False):  # Changed default to False for multi-class
-    """Main preprocessing function"""
-    print("=== Starting Data Preprocessing ===")
-    
-    # Load data
-    df = load_data()
-    
-    # Clean data
-    df = clean_data(df)
-    
-    # Display label distribution before processing
-    print(f"\nLabel distribution before processing:")
-    print(df['label'].value_counts())
-    
-    # Drop 'difficulty' column (not used in modeling)
-    if 'difficulty' in df.columns:
-        df = df.drop(columns=['difficulty'])
-        print("Dropped 'difficulty' column")
-    
-    # Multi-class label encoding as per the article
-    if not binary_label:
-        print("\nConverting labels to 5-class format as per article...")
-        
-        # Attack mapping from article - maps specific attacks to main categories
-        attack_mapping = {
-            # DoS attacks
-            'back': 'DoS', 'land': 'DoS', 'neptune': 'DoS', 'pod': 'DoS', 'smurf': 'DoS', 
-            'teardrop': 'DoS', 'apache2': 'DoS', 'udpstorm': 'DoS', 'processtable': 'DoS', 
-            'worm': 'DoS',
-            # Probe attacks
-            'satan': 'Probe', 'ipsweep': 'Probe', 'nmap': 'Probe', 'portsweep': 'Probe', 
-            'mscan': 'Probe', 'saint': 'Probe',
-            # R2L attacks
-            'guess_passwd': 'R2L', 'ftp_write': 'R2L', 'imap': 'R2L', 'phf': 'R2L', 
-            'multihop': 'R2L', 'warezmaster': 'R2L', 'warezclient': 'R2L', 'spy': 'R2L', 
-            'xlock': 'R2L', 'xsnoop': 'R2L', 'snmpguess': 'R2L', 'snmpgetattack': 'R2L', 
-            'httptunnel': 'R2L', 'sendmail': 'R2L', 'named': 'R2L',
-            # U2R attacks
-            'buffer_overflow': 'U2R', 'loadmodule': 'U2R', 'rootkit': 'U2R', 'perl': 'U2R', 
-            'sqlattack': 'U2R', 'xterm': 'U2R', 'ps': 'U2R'
-        }
-        
-        # Map specific attacks to main categories, keep 'normal' as is
-        df['label'] = df['label'].apply(lambda x: attack_mapping.get(x, 'normal'))
-        
-        # Final numerical mapping for 5 classes
-        final_label_mapping = {
-            'normal': 0,
-            'DoS': 1,
-            'Probe': 2,
-            'R2L': 3,
-            'U2R': 4
-        }
-        
-        df['label'] = df['label'].map(final_label_mapping)
-        
-        print("Label distribution after 5-class conversion:")
-        print(df['label'].value_counts())
-        
-    else:
-        # Binary classification (your original approach)
-        print("\nConverting labels to binary format...")
-        original_labels = df['label'].unique()
-        print(f"Original labels: {original_labels}")
-        
-        df['label'] = df['label'].apply(lambda x: 0 if x == 'normal' else 1)
-        
-        print("Label distribution after binary conversion:")
-        print(df['label'].value_counts())
-    
-    # Use one-hot encoding for categorical features as per article
-    categorical_cols = ['protocol_type', 'service', 'flag']
-    
-    # Verify categorical columns exist
-    existing_categorical_cols = [col for col in categorical_cols if col in df.columns]
-    if len(existing_categorical_cols) != len(categorical_cols):
-        missing_cols = set(categorical_cols) - set(existing_categorical_cols)
-        print(f"Warning: Missing categorical columns: {missing_cols}")
-    
-    print(f"\nApplying one-hot encoding to categorical features: {existing_categorical_cols}")
-    
-    # Separate label before encoding
-    labels = df['label']
-    features_df = df.drop('label', axis=1)
-    
-    # Apply one-hot encoding
-    features_encoded = pd.get_dummies(features_df, columns=existing_categorical_cols, dummy_na=False)
-    
-    # Add label back
-    df_encoded = features_encoded.copy()
-    df_encoded['label'] = labels
-    
-    print(f"Features after one-hot encoding: {len(df_encoded.columns)-1}")  # -1 for label
-    
-    # Identify numerical columns for normalization (exclude binary and label columns)
-    binary_cols = ['land', 'logged_in', 'is_host_login', 'is_guest_login', 'label']
-    # Get one-hot encoded categorical columns
-    encoded_categorical_cols = [col for col in df_encoded.columns if any(cat in col for cat in existing_categorical_cols)]
-    
-    exclude_cols = binary_cols + encoded_categorical_cols
-    numerical_cols = [col for col in df_encoded.columns if col not in exclude_cols]
-    
-    print(f"\nFeature categorization:")
-    print(f"  One-hot encoded categorical features: {len(encoded_categorical_cols)}")
-    print(f"  Binary features: {len([col for col in binary_cols if col in df_encoded.columns])}")
-    print(f"  Numerical features for normalization: {len(numerical_cols)}")
-    
-    # Apply min-max normalization to numerical features
-    df_normalized, scaler = normalize_numerical_features(df_encoded, numerical_cols)
-    
-    # Split data with stratification
-    print(f"\nSplitting data (80% train, 20% test)...")
-    train_df, test_df = train_test_split(df_normalized, test_size=0.2, random_state=42, stratify=df_normalized['label'])
-    
-    # Save processed data
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    processed_path = os.path.join(current_dir, '..', 'data', 'processed')
-    os.makedirs(processed_path, exist_ok=True)
-    
-    # Save with appropriate suffix
-    suffix = "5class" if not binary_label else "binary"
-    train_file = os.path.join(processed_path, f'train_processed_{suffix}.csv')
-    test_file = os.path.join(processed_path, f'test_processed_{suffix}.csv')
-    
-    train_df.to_csv(train_file, index=False)
-    test_df.to_csv(test_file, index=False)
-    
-    print(f"\n=== Preprocessing Complete ===")
-    print(f"Training set size: {len(train_df)} ({len(train_df)/len(df_normalized)*100:.1f}%)")
-    print(f"Test set size: {len(test_df)} ({len(test_df)/len(df_normalized)*100:.1f}%)")
-    print(f"Total features: {len(df_normalized.columns)-1}")  # -1 for label column
-    print(f"Classification type: {'5-class' if not binary_label else 'Binary'}")
-    print(f"Files saved to: {processed_path}")
-    
-    return train_df, test_df, scaler
-
-
-def preprocess_data_article_method(binary_label=False):
+def preprocess_both_encodings(binary_label=False):
     """
-    Main preprocessing function following the exact article methodology:
-    - Load train and test sets separately
-    - Process them independently 
-    - Fit scaler on training data only
-    - Apply same scaler to test data
+    Main preprocessing function that creates both integer-encoded and one-hot encoded datasets
+    
+    Returns:
+    - Integer-encoded datasets (for feature ranking): 41 features
+    - One-hot encoded datasets (for ML algorithms): 122+ features
     """
-    print("=== Starting Data Preprocessing (Article Method) ===")
+    print("=== Starting Dual Preprocessing (Integer + One-Hot Encoding) ===")
     
     # Load train and test data separately
-    train_df, test_df = load_data_separately()
+    train_df_raw, test_df_raw = load_data_separately()
     
-    # Process training data
-    print("\n" + "="*50)
-    print("PROCESSING TRAINING DATA")
-    print("="*50)
+    # ========================================
+    # PROCESS INTEGER-ENCODED DATASETS (41 features)
+    # ========================================
+    print("\n" + "="*60)
+    print("CREATING INTEGER-ENCODED DATASETS (FOR FEATURE RANKING)")
+    print("="*60)
     
-    train_df = preprocess_dataset(train_df, "Training")
-    train_df = apply_label_encoding(train_df, binary_label)
-    train_df = apply_feature_encoding(train_df)
-    train_df, scaler = apply_normalization(train_df, fit_scaler=True)
+    # Process training data with integer encoding
+    train_df_int = train_df_raw.copy()
+    train_df_int = clean_data(train_df_int)
     
-    # Process test data using the same transformations
-    print("\n" + "="*50)
-    print("PROCESSING TEST DATA")
-    print("="*50)
+    # Drop difficulty column
+    if 'difficulty' in train_df_int.columns:
+        train_df_int = train_df_int.drop(columns=['difficulty'])
     
-    test_df = preprocess_dataset(test_df, "Test")
-    test_df = apply_label_encoding(test_df, binary_label)
-    test_df = apply_feature_encoding(test_df)
+    train_df_int = apply_label_encoding(train_df_int, binary_label)
+    train_df_int, encoders = apply_integer_encoding(train_df_int, fit_encoders=True)
+    train_df_int, scaler_int = apply_normalization(train_df_int, fit_scaler=True, encoding_type='integer')
+    
+    # Process test data with integer encoding
+    test_df_int = test_df_raw.copy()
+    test_df_int = clean_data(test_df_int)
+    
+    # Drop difficulty column
+    if 'difficulty' in test_df_int.columns:
+        test_df_int = test_df_int.drop(columns=['difficulty'])
+    
+    test_df_int = apply_label_encoding(test_df_int, binary_label)
+    test_df_int, _ = apply_integer_encoding(test_df_int, encoders=encoders, fit_encoders=False)
+    test_df_int, _ = apply_normalization(test_df_int, scaler=scaler_int, fit_scaler=False, encoding_type='integer')
+    
+    # ========================================
+    # PROCESS ONE-HOT ENCODED DATASETS (122+ features)
+    # ========================================
+    print("\n" + "="*60)
+    print("CREATING ONE-HOT ENCODED DATASETS (FOR ML ALGORITHMS)")
+    print("="*60)
+    
+    # Process training data with one-hot encoding
+    train_df_oh = train_df_raw.copy()
+    train_df_oh = clean_data(train_df_oh)
+    
+    # Drop difficulty column
+    if 'difficulty' in train_df_oh.columns:
+        train_df_oh = train_df_oh.drop(columns=['difficulty'])
+    
+    train_df_oh = apply_label_encoding(train_df_oh, binary_label)
+    train_df_oh = apply_onehot_encoding(train_df_oh)
+    train_df_oh, scaler_oh = apply_normalization(train_df_oh, fit_scaler=True, encoding_type='onehot')
+    
+    # Process test data with one-hot encoding
+    test_df_oh = test_df_raw.copy()
+    test_df_oh = clean_data(test_df_oh)
+    
+    # Drop difficulty column
+    if 'difficulty' in test_df_oh.columns:
+        test_df_oh = test_df_oh.drop(columns=['difficulty'])
+    
+    test_df_oh = apply_label_encoding(test_df_oh, binary_label)
+    test_df_oh = apply_onehot_encoding(test_df_oh)
     
     # Ensure test data has same columns as training data
     # Add missing columns with zeros
-    missing_cols = set(train_df.columns) - set(test_df.columns)
+    missing_cols = set(train_df_oh.columns) - set(test_df_oh.columns)
     for col in missing_cols:
         if col != 'label':  # Don't add label column
-            test_df[col] = 0
+            test_df_oh[col] = 0
             print(f"Added missing column '{col}' to test data with zeros")
     
     # Remove extra columns from test data
-    extra_cols = set(test_df.columns) - set(train_df.columns)
+    extra_cols = set(test_df_oh.columns) - set(train_df_oh.columns)
     for col in extra_cols:
         if col != 'label':  # Don't remove label column
-            test_df = test_df.drop(columns=[col])
+            test_df_oh = test_df_oh.drop(columns=[col])
             print(f"Removed extra column '{col}' from test data")
     
     # Reorder columns to match training data
-    test_df = test_df[train_df.columns]
+    test_df_oh = test_df_oh[train_df_oh.columns]
     
     # Apply normalization to test data using training scaler
-    test_df, _ = apply_normalization(test_df, scaler=scaler, fit_scaler=False)
+    test_df_oh, _ = apply_normalization(test_df_oh, scaler=scaler_oh, fit_scaler=False, encoding_type='onehot')
     
     # Save processed data
     current_dir = os.path.dirname(os.path.abspath(__file__))
     processed_path = os.path.join(current_dir, '..', 'data', 'processed')
     os.makedirs(processed_path, exist_ok=True)
     
-    # Save with appropriate suffix
-    suffix = "5class" if not binary_label else "binary"
-    train_file = os.path.join(processed_path, f'train_processed_{suffix}_article.csv')
-    test_file = os.path.join(processed_path, f'test_processed_{suffix}_article.csv')
+    # Save integer-encoded datasets
+    int_suffix = "5class" if not binary_label else "binary"
+    train_int_file = os.path.join(processed_path, f'train_processed_{int_suffix}_integer.csv')
+    test_int_file = os.path.join(processed_path, f'test_processed_{int_suffix}_integer.csv')
     
-    train_df.to_csv(train_file, index=False)
-    test_df.to_csv(test_file, index=False)
+    train_df_int.to_csv(train_int_file, index=False)
+    test_df_int.to_csv(test_int_file, index=False)
     
-    print(f"\n=== Article Method Preprocessing Complete ===")
-    print(f"Training set size: {len(train_df)}")
-    print(f"Test set size: {len(test_df)}")
-    print(f"Total features: {len(train_df.columns)-1}")  # -1 for label column
+    # Save one-hot encoded datasets
+    oh_suffix = "5class" if not binary_label else "binary"
+    train_oh_file = os.path.join(processed_path, f'train_processed_{oh_suffix}_onehot.csv')
+    test_oh_file = os.path.join(processed_path, f'test_processed_{oh_suffix}_onehot.csv')
+    
+    train_df_oh.to_csv(train_oh_file, index=False)
+    test_df_oh.to_csv(test_oh_file, index=False)
+    
+    print(f"\n=== Dual Preprocessing Complete ===")
+    print(f"Integer-encoded datasets:")
+    print(f"  Training set size: {len(train_df_int)}")
+    print(f"  Test set size: {len(test_df_int)}")
+    print(f"  Features: {len(train_df_int.columns)-1}")
+    print(f"One-hot encoded datasets:")
+    print(f"  Training set size: {len(train_df_oh)}")
+    print(f"  Test set size: {len(test_df_oh)}")
+    print(f"  Features: {len(train_df_oh.columns)-1}")
     print(f"Classification type: {'5-class' if not binary_label else 'Binary'}")
     print(f"Files saved to: {processed_path}")
     
-    return train_df, test_df, scaler
+    return train_df_int, test_df_int, train_df_oh, test_df_oh, scaler_int, scaler_oh
 
 
-def validate_preprocessing():
-    """Validation function to check if preprocessing works correctly"""
+def validate_dual_preprocessing():
+    """Validation function to check if dual preprocessing works correctly"""
     try:
-        print("=== Validating Preprocessing (5-class) ===")
-        train_df, test_df, scaler = preprocess_data(binary_label=False)
+        print("=== Validating Dual Preprocessing (5-class) ===")
+        train_int, test_int, train_oh, test_oh, scaler_int, scaler_oh = preprocess_both_encodings(binary_label=False)
         
-        # Basic validation checks
-        assert len(train_df) > 0, "Training set is empty"
-        assert len(test_df) > 0, "Test set is empty"
-        assert 'label' in train_df.columns, "Label column missing"
+        # Basic validation checks for integer-encoded data
+        assert len(train_int) > 0, "Integer training set is empty"
+        assert len(test_int) > 0, "Integer test set is empty"
+        assert 'label' in train_int.columns, "Integer label column missing"
         
         # Check for 5-class labels (0-4)
-        unique_labels = sorted(train_df['label'].unique())
-        expected_labels = [0, 1, 2, 3, 4]
-        assert unique_labels == expected_labels, f"Expected labels {expected_labels}, got {unique_labels}"
+        unique_labels_int = sorted(train_int['label'].unique())
+        expected_labels_int = [0, 1, 2, 3, 4]
+        assert unique_labels_int == expected_labels_int, f"Expected integer labels {expected_labels_int}, got {unique_labels_int}"
         
         # Check for missing values
-        assert train_df.isnull().sum().sum() == 0, "Training set has missing values"
-        assert test_df.isnull().sum().sum() == 0, "Test set has missing values"
+        assert train_int.isnull().sum().sum() == 0, "Integer training set has missing values"
+        assert test_int.isnull().sum().sum() == 0, "Integer test set has missing values"
+        
+        # Basic validation checks for one-hot encoded data
+        assert len(train_oh) > 0, "One-hot training set is empty"
+        assert len(test_oh) > 0, "One-hot test set is empty"
+        assert 'label' in train_oh.columns, "One-hot label column missing"
+        
+        # Check for 5-class labels (0-4)
+        unique_labels_oh = sorted(train_oh['label'].unique())
+        assert unique_labels_oh == expected_labels_int, f"Expected one-hot labels {expected_labels_int}, got {unique_labels_oh}"
+        
+        # Check for missing values
+        assert train_oh.isnull().sum().sum() == 0, "One-hot training set has missing values"
+        assert test_oh.isnull().sum().sum() == 0, "One-hot test set has missing values"
         
         print("✓ All validation checks passed!")
-        print("✓ 5-class preprocessing is working correctly!")
+        print("✓ Dual preprocessing (5-class) is working correctly!")
         
         # Also test binary classification
-        print("\n=== Validating Preprocessing (Binary) ===")
-        train_df_bin, test_df_bin, scaler_bin = preprocess_data(binary_label=True)
+        print("\n=== Validating Dual Preprocessing (Binary) ===")
+        train_int_bin, test_int_bin, train_oh_bin, test_oh_bin, scaler_int_bin, scaler_oh_bin = preprocess_both_encodings(binary_label=True)
         
         # Check for binary labels (0-1)
-        unique_labels_bin = sorted(train_df_bin['label'].unique())
+        unique_labels_int_bin = sorted(train_int_bin['label'].unique())
         expected_labels_bin = [0, 1]
-        assert unique_labels_bin == expected_labels_bin, f"Expected binary labels {expected_labels_bin}, got {unique_labels_bin}"
+        assert unique_labels_int_bin == expected_labels_bin, f"Expected binary labels {expected_labels_bin}, got {unique_labels_int_bin}"
         
-        print("✓ Binary preprocessing also working correctly!")
+        print("✓ Binary dual preprocessing also working correctly!")
         
         return True
         
@@ -508,7 +386,7 @@ def validate_preprocessing():
 
 if __name__ == '__main__':
     # Run validation
-    if validate_preprocessing():
+    if validate_dual_preprocessing():
         print("\n=== Ready for Feature Selection and Classification ===")
     else:
         print("\n=== Please fix preprocessing issues before proceeding ===")

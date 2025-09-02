@@ -1,76 +1,89 @@
 from pathlib import Path
 import sys
 import pandas as pd
+import numpy as np
 from sklearn.ensemble import RandomForestClassifier
-from code.utils.dgwo import DGWA
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from code.utils.dgwo import DGWA  # Assuming DGWA is in this location
+
+
+def evaluate_mgwa_model(y_true, y_pred):
+    # --- CORRECTION: Use multi-class metrics ---
+    acc = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred, average='weighted', zero_division=0)
+    rec = recall_score(y_true, y_pred, average='weighted', zero_division=0)
+    f1 = f1_score(y_true, y_pred, average='weighted', zero_division=0)
+
+    cm = confusion_matrix(y_true, y_pred)
+    fp = cm.sum(axis=0) - np.diag(cm)
+    fn = cm.sum(axis=1) - np.diag(cm)
+    tp = np.diag(cm)
+    tn = cm.sum() - (fp + fn + tp)
+    specificity = np.mean(tn / (tn + fp)) if np.all((tn + fp) > 0) else 0
+
+    print(f"\n[MGWA] Accuracy: {acc:.4f}")
+    print(f"[MGWA] Precision: {prec:.4f}")
+    print(f"[MGWA] Recall: {rec:.4f}")
+    print(f"[MGWA] F1-score: {f1:.4f}")
+    print(f"[MGWA] Specificity: {specificity:.4f}")
+    print("[MGWA] Confusion Matrix:")
+    print(cm)
+    return {"Accuracy": acc, "Precision": prec, "Recall": rec, "F1-score": f1, "Specificity": specificity}
+
 
 def run_mgwa_feature_selection():
-    print("\n🔹 Running Modified GWA (MGWA)")
+    print("\n🔹 Running Modified GWA (MGWA) Comparison")
 
-    # Load data
-    train_path = PROJECT_ROOT / "data" / "processed" / "train_top20.csv"
-    test_path = PROJECT_ROOT / "data" / "processed" / "test_top20.csv"
+    train_path = PROJECT_ROOT / "data" / "processed" / "train_top20_filtered.csv"
+    test_path = PROJECT_ROOT / "data" / "processed" / "test_top20_filtered.csv"
     train_df = pd.read_csv(train_path)
     test_df = pd.read_csv(test_path)
 
-    X_train = train_df.drop(columns=['label']).values
-    y_train = train_df['label'].values
-    X_test = test_df.drop(columns=['label']).values
-    y_test = test_df['label'].values
+    X_train_full = train_df.drop(columns=['label'])
+    y_train_full = train_df['label']
+    X_test_final = test_df.drop(columns=['label'])
+    y_test_final = test_df['label']
 
-    # Classifier
-    clf = RandomForestClassifier(n_estimators=50, random_state=42)
+    # --- CORRECTION: Create a validation set from the training data to avoid leakage ---
+    X_train_opt, X_val_opt, y_train_opt, y_val_opt = train_test_split(
+        X_train_full, y_train_full, test_size=0.2, random_state=42, stratify=y_train_full
+    )
 
-    # Run MGWA (exploration disabled)
+    clf_for_mgwa = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
+
+    # Run MGWA (simulated by disabling the novel exploration operators)
     mgwa = DGWA(
-        classifier=clf,
-        X_train=X_train,
-        y_train=y_train,
-        X_val=X_test,
-        y_val=y_test,
+        classifier=clf_for_mgwa,
+        X_train=X_train_opt.values,
+        y_train=y_train_opt.values,
+        X_val=X_val_opt.values,  # Use the validation set
+        y_val=y_val_opt.values,  # Use the validation set
         population_size=20,
         max_iter=30,
-        feature_count=X_train.shape[1],
+        feature_count=X_train_full.shape[1],
         verbose=True,
-        use_exploration_ops=False
+        use_exploration_ops=False  # Key difference for MGWA
     )
 
     best_mask, best_score = mgwa.optimize()
-    selected_features = train_df.drop(columns=['label']).columns[best_mask == 1]
+    best_mask = np.array(best_mask, dtype=bool)
+    selected_features = X_train_full.columns[best_mask]
 
-    print(f"\nSelected features by MGWA:")
-    print(list(selected_features))
-    print(f"Best classification accuracy (MGWA): {best_score:.4f}")
+    print(f"\nSelected features by MGWA: {len(selected_features)}")
+    print(f"Best validation accuracy (MGWA): {best_score:.4f}")
 
-    clf.fit(X_train[:, best_mask == 1], y_train)
-    y_pred = clf.predict(X_test[:, best_mask == 1])
-    metrics = evaluate_model(y_test, y_pred)
+    # Final evaluation on the held-out test set
+    final_clf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+    final_clf.fit(X_train_full[selected_features], y_train_full)
+    y_pred = final_clf.predict(X_test_final[selected_features])
 
-    # Save results
+    evaluate_mgwa_model(y_test_final, y_pred)
+
     pd.DataFrame({"Selected_Features": list(selected_features)}).to_csv(
         PROJECT_ROOT / "results" / "tables" / "mgwa_selected_features.csv", index=False
     )
-
-
-def evaluate_model(y_true, y_pred):
-    acc = accuracy_score(y_true, y_pred)
-    prec = precision_score(y_true, y_pred, average='binary')
-    rec = recall_score(y_true, y_pred, average='binary')
-    f1 = f1_score(y_true, y_pred, average='binary')
-    cm = confusion_matrix(y_true, y_pred)
-
-    tn, fp, fn, tp = cm.ravel()
-    specificity = tn / (tn + fp)
-
-    print(f"Accuracy: {acc:.4f}")
-    print(f"Precision: {prec:.4f}")
-    print(f"Recall: {rec:.4f}")
-    print(f"F1-score: {f1:.4f}")
-    print(f"Specificity: {specificity:.4f}")
-    print("Confusion Matrix:")
-    print(cm)

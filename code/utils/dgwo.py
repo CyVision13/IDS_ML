@@ -4,31 +4,14 @@ from sklearn.base import clone
 from sklearn.metrics import accuracy_score
 
 
-def _calculation_fitness(self, wolf):
-    selected_features = np.where(wolf == 1)[0]
-
-    if len(selected_features) == 0:
-        return 0
-
-
-def _update_leaders(self):
-    for i in range(self.pop_size):
-        if self.fitness_scores[i] > self.alpha_score:
-            self.delta_score, self.delta_pos = self.beta_score, self.beta_pos
-            self.beta_score, self.beta_pos = self.delta_score, self.delta_pos
-            self.alpha_score, self.alpha_pos = self.fitness_scores[i], self.fitness_pos
-        elif self.fitness_scores[i] > self.beta_score:
-            self.delta_score, self.delta_pos = self.beta_score, self.beta_pos
-            self.beta_score, self.beta_pos = self.fitness_scores[i], self.fitness_pos
-        elif self.fitness_scores[i] > self.delta_score:
-            self.delta_score, self.delta_pos = self.fitness_scores[i], self.fitness_pos
-
 class SimplifiedDGWA:
     def __init__(self, classifier, X_train, y_train, X_val, y_val,
                  population_size=20, max_iter=50, verbose=False, use_exploration_ops=True):
         self.classifier = classifier
         self.X_train = X_train
+        self.y_train = y_train
         self.X_val = X_val
+        self.y_val = y_val
 
         self.pop_size = population_size
         self.max_iter = max_iter
@@ -42,6 +25,69 @@ class SimplifiedDGWA:
         self.alpha_pos, self.alpha_score = None, -np.inf
         self.beta_pos, self.beta_score = None, -np.inf
         self.delta_pos, self.delta_score = None, -np.inf
+
+    def _calculate_fitness(self, wolf):
+        selected_features = np.where(wolf == 1)[0]
+
+        if len(selected_features) == 0:
+            return 0
+
+        clf = clone(self.classifier)
+        clf.fit(self.X_train[:, selected_features], self.y_train)
+        predictions = clf.predict(self.X_val[:, selected_features])
+
+    def _update_leaders(self):
+        for i in range(self.pop_size):
+            if self.fitness_scores[i] > self.alpha_score:
+                self.delta_score, self.delta_pos = self.beta_score, self.beta_pos
+                self.beta_score, self.beta_pos = self.alpha_score, self.alpha_pos
+                self.alpha_score, self.alpha_pos = self.fitness_scores[i], self.population[i].copy()
+            elif self.fitness_scores[i] > self.beta_score:
+                self.delta_score, self.delta_pos = self.beta_score, self.beta_pos
+                self.beta_score, self.beta_pos = self.fitness_scores[i], self.population[i].copy()
+
+            elif self.fitness_scores[i] > self.delta_score:
+                self.delta_score, self.delta_pos = self.fitness_scores[i], self.population[i].copy()
+
+    def _get_new_position(self, current_wolf):
+        exploitation_pos = (np.sum([self.alpha_pos, self.beta_pos, self.delta_pos], axis=0) >= 2).astype(int)
+
+        if not self.use_exploration_ops:
+            return exploitation_pos
+
+        exploration_pos = current_wolf.copy()
+        length = len(exploration_pos)
+
+        flip_idx = random.randint(0, length - 1)
+        exploration_pos[flip_idx] = 1 - exploration_pos[flip_idx]
+
+        idx1, idx2 = random.sample(range(length), 2)
+        exploration_pos[idx1], exploration_pos[idx2] = exploration_pos[idx2], exploration_pos[idx1]
+
+        return np.where(np.random.rand(self.feature_count) < 0.5, exploration_pos, exploitation_pos)
+
+    def optimize(self):
+        for i in range(self.pop_size):
+            self.fitness_scores[i] = self._calculate_fitness(self.population[i])
+        self._update_leaders()
+
+        for iteration in range(self.max_iter):
+            new_population = []
+            for i in range(self.pop_size):
+                new_wolf = self._get_new_position(self.population[i])
+                new_population.append(new_wolf)
+
+            self.population = np.array(new_population)
+
+            for i in range(self.pop_size):
+                self.fitness_scores[i] = self._calculate_fitness(self.population[i])
+            self._update_leaders()
+
+            if self.verbose:
+                print(f"Iteration {iteration + 1}: Alpha Score = {self.alpha_score}, Beta Score = {self.beta_score}, "
+                      f"Delta Score = {self.delta_score}")
+
+        return self.alpha_pos, self.alpha_score
 
 
 class DGWA:

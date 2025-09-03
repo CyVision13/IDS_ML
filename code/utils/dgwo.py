@@ -4,6 +4,27 @@ from sklearn.base import clone
 from sklearn.metrics import accuracy_score
 
 
+class SimplifiedDGWA:
+    def __init__(self, classifier, X_train, y_train, X_val, y_val,
+                 population_size=20, max_iter=50, verbose=False, use_exploration_ops=True):
+        self.classifier = classifier
+        self.X_train = X_train
+        self.X_val = X_val
+
+        self.pop_size = population_size
+        self.max_iter = max_iter
+        self.feature_count = X_train.shape[1]
+        self.verbose = verbose
+        self.use_exploration_ops = use_exploration_ops
+
+        self.population = np.random.randint(2, size=(self.pop_size, self.feature_count))
+        self.fitness_scores = np.zeros(self.pop_size)
+
+        self.alpha_pos, self.alpha_score = None, -np.inf
+        self.beta_pos, self.beta_score = None, -np.inf
+        self.delta_pos, self.delta_score = None, -np.inf
+
+
 class DGWA:
     def __init__(self, classifier, X_train, y_train, X_val, y_val,
                  population_size=20, max_iter=50, feature_count=None,

@@ -4,22 +4,19 @@ import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 # Setup project root
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-# Assuming the DGWA class is correctly implemented in this file
-from code.utils.dgwo import DGWA
-
+from code.utils.dgwo import SimplifiedDGWA  # Changed from DGWA to SimplifiedDGWA
 
 def run_dgwa_feature_selection():
     """
-    Runs DGWA optimization (Phase 3) and final evaluation (Phase 4).
+    Runs SimplifiedDGWA optimization (Phase 3) and final evaluation (Phase 4).
     """
     print("=" * 60)
-    print("🎯 PHASE 3 & 4: DGWA OPTIMIZATION & FINAL EVALUATION")
+    print("🎯 PHASE 3 & 4: SIMPLIFIED DGWA OPTIMIZATION & FINAL EVALUATION")
     print("=" * 60)
 
     # Load the filtered dataset created by the Fuzzy TOPSIS script
@@ -35,36 +32,34 @@ def run_dgwa_feature_selection():
     X_test_final = test_df.drop(columns=['label'])
     y_test_final = test_df['label']
 
-    # --- CORRECTION 1: Create a validation set from the training data ---
-    # This prevents data leakage. The DGWA will only see this validation set.
+    # Create a validation set from the training data
     X_train_opt, X_val_opt, y_train_opt, y_val_opt = train_test_split(
         X_train_full, y_train_full, test_size=0.2, random_state=42, stratify=y_train_full
     )
-    print(f"Data split for DGWA: Training Opt={X_train_opt.shape}, Validation Opt={X_val_opt.shape}")
+    print(f"Data split for SimplifiedDGWA: Training Opt={X_train_opt.shape}, Validation Opt={X_val_opt.shape}")
 
-    # The classifier that the DGWA will use for fitness evaluation
+    # The classifier that the SimplifiedDGWA will use for fitness evaluation
     clf_for_dgwa = RandomForestClassifier(n_estimators=50, random_state=42, n_jobs=-1)
 
-    # Run DGWA using the new training/validation split
-    dgwa = DGWA(
+    # Run SimplifiedDGWA using the new training/validation split
+    simplified_dgwa = SimplifiedDGWA(
         classifier=clf_for_dgwa,
         X_train=X_train_opt.values,
         y_train=y_train_opt.values,
-        X_val=X_val_opt.values,  # Use the new validation set
-        y_val=y_val_opt.values,  # Use the new validation set
+        X_val=X_val_opt.values,
+        y_val=y_val_opt.values,
         population_size=20,
         max_iter=30,
-        feature_count=X_train_full.shape[1],
         verbose=True
     )
 
-    best_features_mask, best_score = dgwa.optimize()
+    best_features_mask, best_score = simplified_dgwa.optimize()
     best_features_mask = np.array(best_features_mask, dtype=bool)
 
     selected_features = X_train_full.columns[best_features_mask]
-    print("\n🏆 Optimal features selected by DGWA:")
+    print("\n🏆 Optimal features selected by SimplifiedDGWA:")
     print(list(selected_features))
-    print(f"Best validation accuracy during DGWA: {best_score:.4f}")
+    print(f"Best validation accuracy during SimplifiedDGWA: {best_score:.4f}")
 
     # --- PHASE 4: FINAL EVALUATION ---
     print("\n🔬 Evaluating final model on the held-out test set...")
@@ -81,7 +76,7 @@ def run_dgwa_feature_selection():
     evaluate_model(y_test_final, y_pred_final)
 
     # Save the list of selected features
-    output_path = PROJECT_ROOT / "results" / "tables" / "dgwa_selected_features.csv"
+    output_path = PROJECT_ROOT / "results" / "tables" / "simplified_dgwa_selected_features.csv"
     pd.DataFrame({"Selected_Features": list(selected_features)}).to_csv(output_path, index=False)
     print(f"\n✅ Saved selected features to: {output_path}")
 

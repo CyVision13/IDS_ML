@@ -36,6 +36,8 @@ class SimplifiedDGWA:
         clf.fit(self.X_train[:, selected_features], self.y_train)
         predictions = clf.predict(self.X_val[:, selected_features])
 
+        return accuracy_score(self.y_val, predictions)
+
     def _update_leaders(self):
         for i in range(self.pop_size):
             if self.fitness_scores[i] > self.alpha_score:

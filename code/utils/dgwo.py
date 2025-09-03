@@ -4,6 +4,25 @@ from sklearn.base import clone
 from sklearn.metrics import accuracy_score
 
 
+def _calculation_fitness(self, wolf):
+    selected_features = np.where(wolf == 1)[0]
+
+    if len(selected_features) == 0:
+        return 0
+
+
+def _update_leaders(self):
+    for i in range(self.pop_size):
+        if self.fitness_scores[i] > self.alpha_score:
+            self.delta_score, self.delta_pos = self.beta_score, self.beta_pos
+            self.beta_score, self.beta_pos = self.delta_score, self.delta_pos
+            self.alpha_score, self.alpha_pos = self.fitness_scores[i], self.fitness_pos
+        elif self.fitness_scores[i] > self.beta_score:
+            self.delta_score, self.delta_pos = self.beta_score, self.beta_pos
+            self.beta_score, self.beta_pos = self.fitness_scores[i], self.fitness_pos
+        elif self.fitness_scores[i] > self.delta_score:
+            self.delta_score, self.delta_pos = self.fitness_scores[i], self.fitness_pos
+
 class SimplifiedDGWA:
     def __init__(self, classifier, X_train, y_train, X_val, y_val,
                  population_size=20, max_iter=50, verbose=False, use_exploration_ops=True):
